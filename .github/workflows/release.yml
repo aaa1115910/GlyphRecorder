@@ -1,0 +1,135 @@
+name: Release Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-release:
+    name: Build Release Apk
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: 'true'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle to generate and submit dependency graphs
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          dependency-graph: generate-and-submit
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Add signing properties
+        env:
+          SIGNING_PROPERTIES: ${{ secrets.SIGNING_PROPERTIES }}
+        run: |
+          echo ${{ secrets.SIGNING_PROPERTIES }} > encoded_signing_properties
+          base64 -d encoded_signing_properties > signing.properties
+
+      - name: Add jks file
+        run: |
+          echo ${{ secrets.SIGN_KEY }} > ./encoded_key
+          base64 -d encoded_key > key.jks
+
+      - name: Build apk
+        run: ./gradlew assemble
+
+      - name: Read release apk output metadata
+        id: apk-meta-release
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: app/build/outputs/apk/release/output-metadata.json
+
+      - name: Read debug apk output metadata
+        id: apk-meta-debug
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: app/build/outputs/apk/debug/output-metadata.json
+
+      - name: Parse apk infos
+        id: apk-infos
+        run: |
+          echo "release_info_version_code=${{ fromJson(steps.apk-meta-release.outputs.content).elements[0].versionCode }}" >> $GITHUB_ENV
+          echo "release_info_version_name=${{ fromJson(steps.apk-meta-release.outputs.content).elements[0].versionName }}" >> $GITHUB_ENV
+          echo "debug_info_version_code=${{ fromJson(steps.apk-meta-debug.outputs.content).elements[0].versionCode }}" >> $GITHUB_ENV
+          echo "debug_info_version_name=${{ fromJson(steps.apk-meta-debug.outputs.content).elements[0].versionName }}" >> $GITHUB_ENV
+
+      - name: Get changelog
+        id: changelog
+        run: |
+          {
+            echo "changelog<<EOF"
+            echo "$(git log --pretty=format:"- %s (%h)" ${{ github.event.before }}..${{ github.sha }})"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Splicing apk path
+        id: apk-path
+        run: |
+          debug_info_version_name="${{ env.debug_info_version_name }}"
+          release_info_version_name="${{ env.release_info_version_name }}"
+          debug_info_version_name_with_underscore="${debug_info_version_name// /_}"
+          release_info_version_name_with_underscore="${release_info_version_name// /_}"
+          echo "debug_info_version_name_with_underscore=${debug_info_version_name_with_underscore}" >> $GITHUB_ENV
+          echo "release_info_version_name_with_underscore=${release_info_version_name_with_underscore}" >> $GITHUB_ENV
+          echo "apk_path_debug=app/build/outputs/apk/debug/GlyphRecorder_${{ env.debug_info_version_code }}_${debug_info_version_name_with_underscore}_debug.apk" >> $GITHUB_ENV
+          echo "apk_path_release=app/build/outputs/apk/release/GlyphRecorder_${{ env.release_info_version_code }}_${release_info_version_name_with_underscore}_release.apk" >> $GITHUB_ENV
+
+      # upload artifacts debug
+
+      - name: Archive debug build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Debug build artifact
+          path: ${{ env.apk_path_debug }}
+
+      # upload artifacts release
+
+      - name: Archive default release build mappings
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release build mappings
+          path: app/build/outputs/mapping/release
+
+      - name: Archive release build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release build artifact
+          path: ${{ env.apk_path_release }}
+
+      # zip mapping because softprops/action-gh-release can't upload folder
+
+      - name: Zip mapping
+        run: zip -rj mapping.zip app/build/outputs/mapping/release
+
+      # upload to github release
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.apk_path_debug }}
+            ${{ env.apk_path_release }}
+            mapping.zip
+          tag_name: r${{ env.release_info_version_code }}_${{ env.release_info_version_name_with_underscore }}
+          name: ${{ env.release_info_version_name }}
+          prerelease: false
+          body: ${{ env.changelog }}
+          target_commitish: ${{ github.sha }}
+
+
+
+

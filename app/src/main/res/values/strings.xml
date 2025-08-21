@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<resources>
+    <string name="activity_title_correction">校准定位</string>
+
+    <string name="app_name">Glyph Recorder</string>
+
+    <string name="correction_screen_choose_image">选择图片</string>
+    <string name="correction_screen_image_preview_tip">请将画符区域红色圆圈从上到下从左到右依次标记</string>
+    <string name="correction_screen_reset_points">重置</string>
+    <string name="correction_screen_save_success">已保存坐标</string>
+
+    <string name="floating_window_close_tip">松开手指关闭悬浮窗</string>
+    <string name="floating_window_guide_dialog_text">请不要让悬浮窗遮挡上下方内容区域</string>
+    <string name="floating_window_long_time_no_glyph">长时间未检测到 Glyph，已停止屏幕捕获</string>
+
+    <string name="home_screen_correction">校准定位</string>
+    <string name="home_screen_start_service">启动服务</string>
+    <string name="home_screen_stop_service">停止服务</string>
+    <string name="home_screen_update">软件更新</string>
+    <string name="home_screen_update_summary">让您的 Glyph Recorder 更臻完善</string>
+    <string name="home_screen_version">软件版本</string>
+    <string name="home_screen_working_mode">工作模式</string>
+
+    <string name="overlay_permission_failed">未获得悬浮窗权限</string>
+    <string name="overlay_permission_success">已获得悬浮窗权限</string>
+
+    <string name="start_service_failed_already_running">服务已在运行</string>
+    <string name="start_service_failed_error_positions">校准定位所保存的坐标数量不正确，请重新校准</string>
+    <string name="start_service_failed_media_projection">媒体投射服务启动失败</string>
+    <string name="start_service_failed_need_correction_position">请先校准定位</string>
+    <string name="start_service_failed_shizuku">Shizuku 服务启动失败</string>
+
+    <string name="working_mode_media_projection">媒体投影</string>
+    <string name="working_mode_shizuku">Shizuku</string>
+</resources>
