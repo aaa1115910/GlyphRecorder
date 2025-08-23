@@ -22,6 +22,7 @@ import dev.aaa1115910.glyphrecorder.R
 import dev.aaa1115910.glyphrecorder.WorkingMode
 import dev.aaa1115910.glyphrecorder.services.MediaProjectionService
 import dev.aaa1115910.glyphrecorder.util.BitmapUtil
+import dev.aaa1115910.glyphrecorder.util.GlyphData
 import dev.aaa1115910.glyphrecorder.util.Prefs
 import dev.aaa1115910.glyphrecorder.util.ShizukuConfig
 import dev.aaa1115910.glyphrecorder.util.toast
@@ -40,13 +41,46 @@ import java.text.SimpleDateFormat
 data class FloatingToolboxState(
     val context: Context,
     val scope: CoroutineScope,
-    val glyphs: SnapshotStateList<String>,
+    val capturedGlyphs: SnapshotStateList<String>,
+    val matchedGlyphs: SnapshotStateList<String>,
     var mediaProjectionService: MediaProjectionService?,
     val onStopAutoCapture: () -> Unit,
-    val onHapticFeedback:(HapticFeedbackType)->Unit
+    val onHapticFeedback: (HapticFeedbackType) -> Unit
 ) {
     companion object {
         val logger = KotlinLogging.logger { }
+    }
+
+    var targetGlyphSize = 0
+
+    val onAddGlyph: (String) -> Unit = { glyph ->
+        logger.info { "Adding glyph: $glyph" }
+        if (glyph.isNotEmpty()) {
+            capturedGlyphs.add(glyph)
+            logger.info { "Glyph added: $glyph" }
+        } else {
+            logger.warn { "Attempted to add an empty glyph" }
+        }
+
+        // check matched glyphs
+        if (targetGlyphSize > 0 && capturedGlyphs.size != targetGlyphSize) {
+            val matched = GlyphData.matchSequence(targetGlyphSize, capturedGlyphs)
+            if (matched.size == 1) {
+                matchedGlyphs.clear()
+                matchedGlyphs.addAll(matched[0])
+                logger.info { "Find matched glyphs: ${matched[0]}" }
+                onStopAutoCapture()
+            }
+        } else {
+            //matchedGlyphs.clear()
+        }
+    }
+
+    val onClearGlyphs: () -> Unit = {
+        logger.info { "Clearing capturedGlyphs" }
+        capturedGlyphs.clear()
+        matchedGlyphs.clear()
+        targetGlyphSize = 0
     }
 
     val onToast: (String) -> Unit = {
@@ -103,7 +137,7 @@ data class FloatingToolboxState(
         logger.info { "hexagon: $hexagon" }
         logger.info { "glyph: $glyph" }
         if (glyph != null) {
-            glyphs.add(glyph)
+            onAddGlyph(glyph)
             logger.info { "Glyph added: $glyph" }
         } else {
             logger.info { "Failed to parse glyph" }
@@ -125,12 +159,15 @@ data class FloatingToolboxState(
     suspend fun jobContent() {
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(java.util.Date())
         val (hexagon, glyph) = takeScreenshotAsync() ?: return
-        if (hexagon != 0 && glyph == null && hexagon > glyphs.size) return
+        if (hexagon != 0 && glyph == null && hexagon > capturedGlyphs.size) return
 
         when (glyphCaptureState) {
             GlyphCaptureState.Idle -> {
                 // 开始接收符号序列
-                if (hexagon != 0) glyphCaptureState = GlyphCaptureState.Capturing
+                if (hexagon != 0) {
+                    glyphCaptureState = GlyphCaptureState.Capturing
+                    targetGlyphSize = hexagon
+                }
                 if (hexagon == 0) {
                     idleCounter++
                     // 如果连续多次没有符号，进入停止状态，截图间隔 200ms 一次，此处为 10 秒
@@ -145,11 +182,12 @@ data class FloatingToolboxState(
                 // 画符结束
                 if (hexagon == 0) glyphCaptureState = GlyphCaptureState.Stopped
                 // 画符未结束但数量已满
-                if (hexagon != 0 && glyphs.size == hexagon) glyphCaptureState =
+                if (hexagon != 0 && capturedGlyphs.size == hexagon) glyphCaptureState =
                     GlyphCaptureState.Stopped
                 // 画符未结束且数量未满
                 if (hexagon != 0 && glyph == null) {
                     captureCounter++
+                    targetGlyphSize = hexagon
                     // 如果连续多次没有符号，进入停止状态，正常情况下只会有 3s 时间 glyph==null，截图间隔 200ms 一次，此处为 3+10 秒
                     if (captureCounter > 5 * 13) {
                         glyphCaptureState = GlyphCaptureState.Stopped
@@ -164,15 +202,15 @@ data class FloatingToolboxState(
         }
 
         logger.info { "[$timestamp] AutoCapture job content: glyphCaptureState=$glyphCaptureState, glyph=$glyph" }
-        if (autoRunning && glyphCaptureState == GlyphCaptureState.Capturing && glyph != null && glyphs.lastOrNull() != glyph) {
-            glyphs.add(glyph)
+        if (autoRunning && glyphCaptureState == GlyphCaptureState.Capturing && glyph != null && capturedGlyphs.lastOrNull() != glyph) {
+            onAddGlyph(glyph)
         }
     }
 
     fun startAutoCapture() {
         if (autoCaptureJob?.isActive == true) return // 已在自动捕捉
 
-        glyphs.clear()
+        onClearGlyphs()
         idleCounter = 0
         interval = 200L
         glyphCaptureState = GlyphCaptureState.Idle
@@ -208,9 +246,10 @@ fun rememberFloatingToolboxState(
     val logger = KotlinLogging.logger("rememberFloatingToolboxState")
 
     var mediaProjectionService by remember { mutableStateOf<MediaProjectionService?>(null) }
-    val glyphs = remember { mutableStateListOf<String>() }
+    val capturedGlyphs = remember { mutableStateListOf<String>() }
+    val matchedGlyphs = remember { mutableStateListOf<String>() }
 
-    val onHapticFeedback:(HapticFeedbackType) -> Unit = { type ->
+    val onHapticFeedback: (HapticFeedbackType) -> Unit = { type ->
         haptic.performHapticFeedback(type)
     }
 
@@ -252,7 +291,8 @@ fun rememberFloatingToolboxState(
         FloatingToolboxState(
             context,
             scope,
-            glyphs,
+            capturedGlyphs,
+            matchedGlyphs,
             mediaProjectionService,
             onStopAutoCapture,
             onHapticFeedback

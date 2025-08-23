@@ -169,7 +169,7 @@ private fun GlyphPreview() {
 @Composable
 private fun GlyphsPreview() {
     val glyphs = listOf(
-        "star", "weak", "save", "see"
+        "star", "weak", "save", "see","defend"
     )
     MaterialTheme {
         Row(

@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import com.github.only52607.compose.window.ComposeFloatingWindow
 import com.github.only52607.compose.window.LocalFloatingWindow
+import dev.aaa1115910.glyphrecorder.BuildConfig
 import dev.aaa1115910.glyphrecorder.R
 import dev.aaa1115910.glyphrecorder.ui.components.GlyphImage
 import dev.aaa1115910.glyphrecorder.util.Prefs
@@ -104,7 +105,8 @@ private fun FloatingToolbox(
         expanded = expanded,
         autoCapture = autoCapturing,
         showCloseTip = showCloseTip,
-        glyphs = state.glyphs,
+        capturedGlyphs = state.capturedGlyphs,
+        matchedGlyphs = state.matchedGlyphs,
         onExpandedChange = {
             haptic.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
             expanded = it
@@ -127,7 +129,7 @@ private fun FloatingToolbox(
         },
         onClear = {
             haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-            state.glyphs.clear()
+            state.capturedGlyphs.clear()
         },
         onClose = {
             floatingWindow.hide()
@@ -146,7 +148,8 @@ private fun FloatingToolboxContent(
     expanded: Boolean,
     autoCapture: Boolean,
     showCloseTip: Boolean,
-    glyphs: List<String>,
+    capturedGlyphs: List<String>,
+    matchedGlyphs: List<String>,
     onExpandedChange: (Boolean) -> Unit,
     onCapture: () -> Unit,
     onStartAutoCapture: () -> Unit,
@@ -225,7 +228,7 @@ private fun FloatingToolboxContent(
                         )
                     }
                 }
-                if (glyphs.isNotEmpty()) {
+                if (capturedGlyphs.isNotEmpty()) {
                     FilledTonalIconButton(onClick = {
                         onClear()
                     }) {
@@ -239,7 +242,7 @@ private fun FloatingToolboxContent(
         }
         if (expanded) {
             GlyphRow(
-                glyphs = glyphs
+                glyphs = matchedGlyphs.ifEmpty { capturedGlyphs }
             )
         }
     }
@@ -378,7 +381,8 @@ private fun FloatingToolboxPreview() {
             expanded = expanded,
             autoCapture = false,
             showCloseTip = false,
-            glyphs = glyphs,
+            capturedGlyphs = glyphs,
+            matchedGlyphs = glyphs,
             onExpandedChange = { expanded = it },
             onCapture = {},
             onStartAutoCapture = {},
