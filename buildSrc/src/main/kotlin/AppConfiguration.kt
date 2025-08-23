@@ -3,7 +3,7 @@ object AppConfiguration {
     const val minSdk = 30
     const val targerSdk = 36
     const val compileSdk = 36
-    val versionCode: Int by lazy { "git rev-list --count HEAD".exec().toInt() }
+    const val versionCode = 2
     private val recursionAndLevel = calculateRecursionAndLevel(versionCode)
     val recursion get() = recursionAndLevel.first
     val level get() = recursionAndLevel.second
