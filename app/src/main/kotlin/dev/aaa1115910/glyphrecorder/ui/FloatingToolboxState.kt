@@ -155,9 +155,11 @@ data class FloatingToolboxState(
     var glyphCaptureState = GlyphCaptureState.Idle
     var idleCounter = 0
     var captureCounter = 0
+    var lastTimestamp = 0
 
     suspend fun jobContent() {
-        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(java.util.Date())
+        val timestamp = System.currentTimeMillis()
+        val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(java.util.Date())
         val (hexagon, glyph) = takeScreenshotAsync() ?: return
         if (hexagon != 0 && glyph == null && hexagon > capturedGlyphs.size) return
 
@@ -201,9 +203,13 @@ data class FloatingToolboxState(
             }
         }
 
-        logger.info { "[$timestamp] AutoCapture job content: glyphCaptureState=$glyphCaptureState, glyph=$glyph" }
+        logger.info { "[$time] AutoCapture job content: glyphCaptureState=$glyphCaptureState, glyph=$glyph" }
         if (autoRunning && glyphCaptureState == GlyphCaptureState.Capturing && glyph != null && capturedGlyphs.lastOrNull() != glyph) {
-            onAddGlyph(glyph)
+            if (timestamp > lastTimestamp) {
+                onAddGlyph(glyph)
+            } else {
+                logger.info { "Skip adding glyph due to expired glyph: $glyph" }
+            }
         }
     }
 
