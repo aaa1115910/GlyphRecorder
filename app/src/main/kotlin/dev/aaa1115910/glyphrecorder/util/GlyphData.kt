@@ -1,8 +1,6 @@
 package dev.aaa1115910.glyphrecorder.util
 
 import android.content.Context
-import dev.aaa1115910.glyphrecorder.App
-import kotlin.collections.forEach
 
 
 object GlyphData {
@@ -10,13 +8,9 @@ object GlyphData {
     val glyphSequence = mutableListOf<List<String>>()
     val glyphSequenceMap = mutableMapOf<Int, MutableList<List<String>>>()
 
-    init {
-        initGlyphData()
-    }
-
-    private fun initGlyphData() {
-        readGlyphCsv(App.Companion.context)
-        readGlyphLineCsv(App.Companion.context)
+    fun initGlyphData(context: Context) {
+        readGlyphCsv(context)
+        readGlyphLineCsv(context)
     }
 
     private fun readGlyphCsv(context: Context) {
@@ -64,5 +58,18 @@ object GlyphData {
             }
         }
         return false
+    }
+
+    fun nameToPaths(name: String): List<Pair<Circle, Circle>> {
+        val glyphPath = glyphLines[name] ?: return emptyList()
+        val glyphPathTuples = glyphPath.windowed(2)
+        return glyphPathTuples.map {
+            var start = it[0]
+            var end = it[1]
+            if (start > end) {
+                start = end.also { end = start }
+            }
+            Pair(Circle.fromId(start.toString()), Circle.fromId(end.toString()))
+        }
     }
 }

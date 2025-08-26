@@ -95,6 +95,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.graphics.core)
+    implementation(libs.androidx.graphics.path)
+    implementation(libs.androidx.graphics.shapes)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.compose.floating.window)
     implementation(libs.kotlinx.coroutines.core)
@@ -119,13 +122,13 @@ dependencies {
 }
 
 // download glyph data from chibatching/glyph-predictor-data
-tasks.register("downloadGlyphData"){
+tasks.register("downloadGlyphData") {
     val assetsDir = file("src/main/assets")
     val glyphCsvFile = file("$assetsDir/glyph.csv")
     val glyphCsvLineFile = file("$assetsDir/glyph_line.csv")
-    if (!assetsDir.exists())assetsDir.mkdirs()
+    if (!assetsDir.exists()) assetsDir.mkdirs()
 
-    val downloadFile:(File,String)->Unit={ file, resourceUrl ->
+    val downloadFile: (File, String) -> Unit = { file, resourceUrl ->
         if (!file.exists()) {
             URI(resourceUrl).toURL().openStream().use { input ->
                 file.outputStream().use { output ->

@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -27,7 +27,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.aaa1115910.glyphrecorder.util.Circle
 import dev.aaa1115910.glyphrecorder.util.GlyphData
-import dev.aaa1115910.glyphrecorder.util.OpenCvUtil.splitOverlappingPaths
 import kotlin.math.sqrt
 
 
@@ -39,23 +38,7 @@ fun GlyphImage(
     containerColor: Color = Color.DarkGray,
     showBackground: Boolean = true
 ) {
-    val paths = remember { mutableStateListOf<Pair<Circle, Circle>>() }
-
-    LaunchedEffect(name) {
-        val glyphPath = GlyphData.glyphLines[name]!!
-        val glyphPathTuples = glyphPath.windowed(2)
-        val glyphPathList = glyphPathTuples.map {
-            var start = it[0]
-            var end = it[1]
-            if (start > end) {
-                start = end.also { end = start }
-            }
-            Pair(Circle.fromId(start.toString()), Circle.fromId(end.toString()))
-        }
-        val glyphPathSet = splitOverlappingPaths(glyphPathList).toSet()
-        paths.clear()
-        paths.addAll(glyphPathSet)
-    }
+    val paths by remember(name) { derivedStateOf { GlyphData.nameToPaths(name) } }
 
     GlyphImage(
         modifier = modifier,
@@ -169,7 +152,7 @@ private fun GlyphPreview() {
 @Composable
 private fun GlyphsPreview() {
     val glyphs = listOf(
-        "star", "weak", "save", "see","defend"
+        "star", "weak", "save", "see", "defend"
     )
     MaterialTheme {
         Row(

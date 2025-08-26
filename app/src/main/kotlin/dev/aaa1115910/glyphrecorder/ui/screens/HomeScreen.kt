@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Screenshot
@@ -51,6 +52,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import dev.aaa1115910.glyphrecorder.util.openHackEmulator
 import dev.aaa1115910.glyphrecorder.BuildConfig
 import dev.aaa1115910.glyphrecorder.R
 import dev.aaa1115910.glyphrecorder.WorkingMode
@@ -326,6 +328,16 @@ private fun HomeScreenContent(
                                 icon = Icons.Default.MyLocation,
                                 onClick = onCorrection
                             )
+                        },
+                        null to {
+                            @Suppress("KotlinConstantConditions")
+                            if (BuildConfig.BUILD_TYPE == "debug") {
+                                textPreference(
+                                    title = "Hack Emulator",
+                                    icon = Icons.Default.BugReport,
+                                    onClick = { openHackEmulator(context) }
+                                )
+                            }
                         },
                         null to {
                             if (hasUpdate) {

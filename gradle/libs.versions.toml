@@ -6,9 +6,11 @@ compose-floating-window = "148f5e9"
 compose-material3 = "1.5.0-alpha02"
 core = "1.17.0"
 datastore = "1.1.7"
+graphics = "1.0.1"
+graphics-core = "1.0.3"
 kotlin = "2.2.10"
 kotlinx-coroutines = "1.10.2"
-kotlinx-serialization="1.9.0"
+kotlinx-serialization = "1.9.0"
 ktor-bom = "3.2.3"
 lifecycle = "2.9.2"
 logging = "7.0.12"
@@ -49,6 +51,11 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 # https://developer.android.com/topic/libraries/architecture/datastore
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
+# https://developer.android.com/jetpack/androidx/releases/graphics
+androidx-graphics-core = { group = "androidx.graphics", name = "graphics-core", version.ref = "graphics-core" }
+androidx-graphics-path = { group = "androidx.graphics", name = "graphics-path", version.ref = "graphics" }
+androidx-graphics-shapes = { group = "androidx.graphics", name = "graphics-shapes", version.ref = "graphics" }
+
 # https://developer.android.com/jetpack/androidx/releases/lifecycle
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
 
@@ -71,9 +78,9 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 # https://ktor.io/docs/client-dependencies.html
 ktor-bom = { group = "io.ktor", name = "ktor-bom", version.ref = "ktor-bom" }
 ktor-client-core = { group = "io.ktor", name = "ktor-client-core" }
-ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp"}
-ktor-client-content-negotiation= { group = "io.ktor", name = "ktor-client-content-negotiation" }
-ktor-serialization-kotlinx-json= { group = "io.ktor", name = "ktor-serialization-kotlinx-json" }
+ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp" }
+ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation" }
+ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json" }
 
 # https://github.com/oshai/kotlin-logging
 logging = { group = "io.github.oshai", name = "kotlin-logging", version.ref = "logging" }
