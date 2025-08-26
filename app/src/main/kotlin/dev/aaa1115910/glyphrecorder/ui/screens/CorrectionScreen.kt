@@ -16,28 +16,40 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,6 +100,20 @@ fun CorrectionScreen(modifier: Modifier = Modifier) {
     var screenshotBitmap by rememberSaveable { mutableStateOf<Bitmap?>(null) }
     val screenshotCircles = rememberSaveable { mutableStateListOf<Pair<Int, Int>>() }
     val confirmedCircles = rememberSaveable { mutableStateListOf<Pair<Int, Int>>() }
+
+    var showOpenCvParamsPanel by remember { mutableStateOf(false) }
+    var openCvHoughCirclesParams by remember {
+        mutableStateOf(
+            OpenCvHoughCirclesParams(
+                dp = 1.2,
+                minDist = 30.0,
+                param1 = 50.0,
+                param2 = 30.0,
+                minRadius = 25,
+                maxRadius = 30
+            )
+        )
+    }
 
     val photoPickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -140,21 +166,40 @@ fun CorrectionScreen(modifier: Modifier = Modifier) {
         confirmedCircles.clear()
     }
 
+    val updateCircles: (OpenCvHoughCirclesParams) -> Unit = { params ->
+        if (screenshotBitmap != null) {
+            logger.info { "Updating circles with params: $params" }
+            val circles = OpenCvUtil.detectCircles(
+                screenshotBitmap!!,
+                params.dp,
+                params.minDist,
+                params.param1,
+                params.param2,
+                params.minRadius,
+                params.maxRadius
+            )
+            logger.info { "Circles: $circles" }
+            for ((index, pair) in circles.withIndex()) {
+                logger.info { "Circle $index: x=${pair.first}, y=${pair.second}" }
+            }
+            screenshotCircles.clear()
+            confirmedCircles.clear()
+            screenshotCircles.addAll(circles)
+            if (circles.size == 11) confirmedCircles.addAll(circles)
+        }
+    }
+
     LaunchedEffect(screenshotUri) {
         if (screenshotUri == null) return@LaunchedEffect
         val inputStream = context.contentResolver.openInputStream(screenshotUri!!)
         screenshotBitmap = BitmapFactory.decodeStream(inputStream)
         inputStream?.close()
+        updateCircles(openCvHoughCirclesParams)
+    }
 
-        val circles = OpenCvUtil.detectCircles(screenshotBitmap!!)
-        logger.info { "Circles: $circles" }
-        for ((index, pair) in circles.withIndex()) {
-            logger.info { "Circle $index: x=${pair.first}, y=${pair.second}" }
-        }
-        screenshotCircles.clear()
-        confirmedCircles.clear()
-        screenshotCircles.addAll(circles)
-        if (circles.size == 11) confirmedCircles.addAll(circles)
+    LaunchedEffect(openCvHoughCirclesParams) {
+        if (screenshotUri == null || screenshotBitmap == null) return@LaunchedEffect
+        updateCircles(openCvHoughCirclesParams)
     }
 
     CorrectionScreenContent(
@@ -163,11 +208,16 @@ fun CorrectionScreen(modifier: Modifier = Modifier) {
         screenshotBitmap = screenshotBitmap,
         screenshotCircles = screenshotCircles,
         confirmedCircles = confirmedCircles,
+        showOpenCvParamsPanel = showOpenCvParamsPanel,
+        openCvHoughCirclesParams = openCvHoughCirclesParams,
         onExit = onExit,
         onChooserImage = onChooserImage,
         onSave = onSave,
         onConfirmClick = onConfirmClick,
-        onClearConfirmedCircles = onClearConfirmedCircles
+        onClearConfirmedCircles = onClearConfirmedCircles,
+        onShowOpenCvParamsPanel = { showOpenCvParamsPanel = true },
+        onHideOpenCvParamsPanel = { showOpenCvParamsPanel = false },
+        onChangeOpenCvHoughCirclesParams = { openCvHoughCirclesParams = it }
     )
 }
 
@@ -179,11 +229,16 @@ private fun CorrectionScreenContent(
     screenshotBitmap: Bitmap?,
     screenshotCircles: List<Pair<Int, Int>>,
     confirmedCircles: List<Pair<Int, Int>>,
+    showOpenCvParamsPanel: Boolean,
+    openCvHoughCirclesParams: OpenCvHoughCirclesParams,
     onExit: () -> Unit,
     onChooserImage: () -> Unit,
     onSave: () -> Unit,
     onConfirmClick: (Int, Int) -> Unit,
-    onClearConfirmedCircles: () -> Unit
+    onClearConfirmedCircles: () -> Unit,
+    onShowOpenCvParamsPanel: () -> Unit,
+    onHideOpenCvParamsPanel: () -> Unit,
+    onChangeOpenCvHoughCirclesParams: (OpenCvHoughCirclesParams) -> Unit
 ) {
     val saveAvailable by remember { derivedStateOf { confirmedCircles.size == 11 } }
 
@@ -221,8 +276,9 @@ private fun CorrectionScreenContent(
     ) { innerPadding ->
         Column(
             modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxWidth(),
+                .padding(top = innerPadding.calculateTopPadding())
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -235,6 +291,15 @@ private fun CorrectionScreenContent(
                 confirmedCircles = confirmedCircles,
                 onConfirmClick = onConfirmClick
             )
+            AnimatedVisibility(showOpenCvParamsPanel) {
+                OpenCvParamsPanel(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    params = openCvHoughCirclesParams,
+                    onParamsChange = onChangeOpenCvHoughCirclesParams
+                )
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -246,12 +311,24 @@ private fun CorrectionScreenContent(
                         Text(text = stringResource(R.string.correction_screen_reset_points))
                     }
                 }
+                AnimatedVisibility(screenshotBitmap != null) {
+                    if (showOpenCvParamsPanel) {
+                        FilledTonalButton(onClick = onHideOpenCvParamsPanel) {
+                            Text(text = stringResource(R.string.correction_screen_hide_opencv_params))
+                        }
+                    } else {
+                        FilledTonalButton(onClick = onShowOpenCvParamsPanel) {
+                            Text(text = stringResource(R.string.correction_screen_opencv_params))
+                        }
+                    }
+                }
             }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp)
-                    .padding(top = 12.dp),
+                    .padding(top = 12.dp)
+                    .navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Icon(
@@ -263,7 +340,6 @@ private fun CorrectionScreenContent(
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
-
         }
     }
 }
@@ -283,13 +359,20 @@ private fun CorrectionPreview(
 
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
-    val screenWidthPx = with(density) { screenWidthDp.dp.toPx() }
-    val screenHeightPx = with(density) { screenHeightDp.dp.toPx() }
+    var screenWidthPx by remember { mutableFloatStateOf(with(density) { screenWidthDp.dp.toPx() }) }
+    var screenHeightPx by remember { mutableFloatStateOf(with(density) { screenHeightDp.dp.toPx() }) }
+    val bitmapAspectRatio by remember { derivedStateOf { screenWidthPx / screenHeightPx } }
+
+    LaunchedEffect(image) {
+        if (image == null) return@LaunchedEffect
+        screenWidthPx = image.width.toFloat()
+        screenHeightPx = image.height.toFloat()
+    }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(screenAspectRatio)
+            .aspectRatio(if (image == null) screenAspectRatio else bitmapAspectRatio)
             .clip(MaterialTheme.shapes.large)
             .background(MaterialTheme.colorScheme.surfaceBright)
             .pointerInput(screenshotCircles, confirmedCircles) {
@@ -319,7 +402,7 @@ private fun CorrectionPreview(
                 //    color = MaterialTheme.colorScheme.onSurfaceVariant
                 //)
                 Text(
-                    text = "请选择空白的画符截图",
+                    text = stringResource(R.string.correction_screen_image_placeholder),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -367,6 +450,145 @@ private fun CorrectionPreview(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun OpenCvParamsPanel(
+    modifier: Modifier = Modifier,
+    params: OpenCvHoughCirclesParams,
+    onParamsChange: (OpenCvHoughCirclesParams) -> Unit
+) {
+    var tab by remember { mutableStateOf(OpenCvHoughCirclesParam.Dp) }
+
+    val dp by remember(params) { derivedStateOf { params.dp.toFloat() } }
+    val minDist by remember(params) { derivedStateOf { params.minDist.toFloat() } }
+    val param1 by remember(params) { derivedStateOf { params.param1.toFloat() } }
+    val param2 by remember(params) { derivedStateOf { params.param2.toFloat() } }
+    val minRadius by remember(params) { derivedStateOf { params.minRadius.toFloat() } }
+    val maxRadius by remember(params) { derivedStateOf { params.maxRadius.toFloat() } }
+
+    Column(
+        modifier = modifier
+    ) {
+        Row {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(items = OpenCvHoughCirclesParam.entries) { param ->
+                    val value =
+                        when (param) {
+                            OpenCvHoughCirclesParam.Dp -> dp
+                            OpenCvHoughCirclesParam.MinDist -> minDist
+                            OpenCvHoughCirclesParam.Param1 -> param1
+                            OpenCvHoughCirclesParam.Param2 -> param2
+                            OpenCvHoughCirclesParam.MinRadius -> minRadius
+                            OpenCvHoughCirclesParam.MaxRadius -> maxRadius
+                        }
+                    if (tab == param) {
+                        Button(
+                            modifier = Modifier.height(32.dp),
+                            onClick = {},
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+
+                            Text(text = "${param.name} ${"%.1f".format(value)}")
+                        }
+                    } else {
+                        TextButton(
+                            modifier = Modifier.height(32.dp),
+                            onClick = {
+                                tab = param
+                            }
+                        ) {
+                            Text(text = "${param.name} ${"%.1f".format(value)}")
+                        }
+                    }
+                }
+            }
+        }
+
+        when (tab) {
+            OpenCvHoughCirclesParam.Dp -> {
+                Slider(
+                    modifier = Modifier,
+                    value = dp,
+                    onValueChange = { onParamsChange(params.copy(dp = it.toDouble())) },
+                    valueRange = 1f..2f,
+                    steps = 9,
+                )
+            }
+
+            OpenCvHoughCirclesParam.MinDist -> {
+                Slider(
+                    modifier = Modifier,
+                    value = minDist,
+                    onValueChange = { onParamsChange(params.copy(minDist = it.toDouble())) },
+                    valueRange = 20f..50f,
+                    steps = 29,
+                )
+            }
+
+            OpenCvHoughCirclesParam.Param1 -> {
+                Slider(
+                    modifier = Modifier,
+                    value = param1,
+                    onValueChange = { onParamsChange(params.copy(param1 = it.toDouble())) },
+                    valueRange = 20f..100f,
+                    steps = 79,
+                )
+            }
+
+            OpenCvHoughCirclesParam.Param2 -> {
+                Slider(
+                    modifier = Modifier,
+                    value = param2,
+                    onValueChange = { onParamsChange(params.copy(param2 = it.toDouble())) },
+                    valueRange = 10f..50f,
+                    steps = 39,
+                )
+            }
+
+            OpenCvHoughCirclesParam.MinRadius -> {
+                Slider(
+                    modifier = Modifier,
+                    value = minRadius,
+                    onValueChange = {
+                        if (it < params.maxRadius) onParamsChange(params.copy(minRadius = it.toInt()))
+                    },
+                    valueRange = 10f..50f,
+                    steps = 39,
+                )
+            }
+
+            OpenCvHoughCirclesParam.MaxRadius -> {
+                Slider(
+                    modifier = Modifier,
+                    value = maxRadius,
+                    onValueChange = {
+                        if (it > params.minRadius) onParamsChange(params.copy(maxRadius = it.toInt()))
+                    },
+                    valueRange = 10f..50f,
+                    steps = 39,
+                )
+            }
+        }
+    }
+
+}
+
+private enum class OpenCvHoughCirclesParam {
+    Dp, MinDist, Param1, Param2, MinRadius, MaxRadius
+}
+
+private data class OpenCvHoughCirclesParams(
+    val dp: Double,
+    val minDist: Double,
+    val param1: Double,
+    val param2: Double,
+    val minRadius: Int,
+    val maxRadius: Int
+)
+
 @Preview
 @Preview(uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
@@ -377,17 +599,60 @@ private fun CorrectionScreenPreview(modifier: Modifier = Modifier) {
     val screenHeight = configuration.screenHeightDp
     val screenAspectRatio = screenWidth.toFloat() / screenHeight.toFloat()
 
+    var showOpenCvParamsPanel by remember { mutableStateOf(false) }
+    var openCvHoughCirclesParams by remember {
+        mutableStateOf(
+            OpenCvHoughCirclesParams(
+                dp = 1.2,
+                minDist = 30.0,
+                param1 = 50.0,
+                param2 = 30.0,
+                minRadius = 25,
+                maxRadius = 30
+            )
+        )
+    }
+
     GlyphRecorderTheme {
         CorrectionScreenContent(
             screenAspectRatio = screenAspectRatio,
             screenshotBitmap = null,
             screenshotCircles = emptyList(),
             confirmedCircles = emptyList(),
+            showOpenCvParamsPanel = showOpenCvParamsPanel,
+            openCvHoughCirclesParams = openCvHoughCirclesParams,
             onExit = {},
             onChooserImage = {},
             onSave = {},
             onConfirmClick = { _, _ -> },
-            onClearConfirmedCircles = {}
+            onClearConfirmedCircles = {},
+            onShowOpenCvParamsPanel = { showOpenCvParamsPanel = true },
+            onHideOpenCvParamsPanel = { showOpenCvParamsPanel = false },
+            onChangeOpenCvHoughCirclesParams = { openCvHoughCirclesParams = it }
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun OpenCvParamsPanelPreview() {
+    var params by remember {
+        mutableStateOf(
+            OpenCvHoughCirclesParams(
+                dp = 1.2,
+                minDist = 30.0,
+                param1 = 50.0,
+                param2 = 30.0,
+                minRadius = 25,
+                maxRadius = 30
+            )
+        )
+    }
+
+    GlyphRecorderTheme {
+        OpenCvParamsPanel(
+            params = params,
+            onParamsChange = { params = it }
         )
     }
 }

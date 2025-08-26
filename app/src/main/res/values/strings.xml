@@ -5,7 +5,10 @@
     <string name="app_name">Glyph Recorder</string>
 
     <string name="correction_screen_choose_image">选择图片</string>
+    <string name="correction_screen_hide_opencv_params">隐藏参数</string>
+    <string name="correction_screen_image_placeholder">请选择空白的画符截图</string>
     <string name="correction_screen_image_preview_tip">请将画符区域红色圆圈从上到下从左到右依次标记</string>
+    <string name="correction_screen_opencv_params">调整参数</string>
     <string name="correction_screen_reset_points">重置</string>
     <string name="correction_screen_save_success">已保存坐标</string>
 

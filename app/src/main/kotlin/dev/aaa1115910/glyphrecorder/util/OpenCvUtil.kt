@@ -37,9 +37,17 @@ object OpenCvUtil {
      * 识别圆心坐标
      * @return 返回包含圆心坐标的列表，每个圆心以 (x, y) 的形式表示
      */
-    fun detectCircles(bitmap: Bitmap): List<Pair<Int, Int>> {
+    fun detectCircles(
+        bitmap: Bitmap,
+        dp: Double = 1.2,
+        minDist: Double = 30.0,
+        param1: Double = 50.0,
+        param2: Double = 30.0,
+        minRadius: Int = 25,
+        maxRadius: Int = 30
+    ): List<Pair<Int, Int>> {
         val image = bitmap.toMat()
-        val result = detectCircles(image)
+        val result = detectCircles(image, dp, minDist, param1, param2, minRadius, maxRadius)
         image.release()
         return result
     }
@@ -97,16 +105,30 @@ object OpenCvUtil {
     /**
      * 使用HoughCircles检测图像中的圆
      * @param mat 输入的图像矩阵
+     * @param dp 累加器分辨率与图像分辨率的反比
+     * @param minDist 检测到的圆心之间的最小距离，
+     * @param param1 边缘检测时使用的高阈值
+     * @param param2 中心检测时使用的累加器阈值
+     * @param minRadius 圆的最小半径
+     * @param maxRadius 圆的最大半径
      * @return 返回检测到的圆的中心坐标列表
      * 每个圆的坐标以 (x, y) 的形式表示
      * 如果没有检测到圆，则返回空列表
      */
-    fun detectCircles(mat: Mat): List<Pair<Int, Int>> {
+    fun detectCircles(
+        mat: Mat,
+        dp: Double = 1.2,
+        minDist: Double = 30.0,
+        param1: Double = 50.0,
+        param2: Double = 30.0,
+        minRadius: Int = 25,
+        maxRadius: Int = 30
+    ): List<Pair<Int, Int>> {
         val grayMat = cvtColor(mat, Imgproc.COLOR_BGR2GRAY)
         val blurredMat = gaussianBlur(grayMat, Size(9.0, 9.0), 2.0)
         grayMat.release()
         val circles =
-            houghCircles(blurredMat, Imgproc.HOUGH_GRADIENT, 1.2, 30.0, 50.0, 30.0, 25, 30)
+            houghCircles(blurredMat, Imgproc.HOUGH_GRADIENT, dp, minDist, param1, param2, minRadius, maxRadius)
         blurredMat.release()
 
         if (circles.cols() > 0) {
