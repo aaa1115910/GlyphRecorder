@@ -129,7 +129,7 @@ private fun FloatingToolbox(
         },
         onClear = {
             haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-            state.capturedGlyphs.clear()
+            state.onClearGlyphs()
         },
         onClose = {
             floatingWindow.hide()
@@ -148,7 +148,7 @@ private fun FloatingToolboxContent(
     expanded: Boolean,
     autoCapture: Boolean,
     showCloseTip: Boolean,
-    capturedGlyphs: List<String>,
+    capturedGlyphs: List<CapturedGlyph>,
     matchedGlyphs: List<String>,
     onExpandedChange: (Boolean) -> Unit,
     onCapture: () -> Unit,
@@ -242,7 +242,7 @@ private fun FloatingToolboxContent(
         }
         if (expanded) {
             GlyphRow(
-                glyphs = matchedGlyphs.ifEmpty { capturedGlyphs }
+                glyphs = matchedGlyphs.ifEmpty { capturedGlyphs.map { it.name } }
             )
         }
     }
@@ -381,7 +381,7 @@ private fun FloatingToolboxPreview() {
             expanded = expanded,
             autoCapture = false,
             showCloseTip = false,
-            capturedGlyphs = glyphs,
+            capturedGlyphs = glyphs.mapIndexed { index, glyph -> CapturedGlyph(glyph, index) },
             matchedGlyphs = glyphs,
             onExpandedChange = { expanded = it },
             onCapture = {},

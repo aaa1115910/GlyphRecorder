@@ -2,9 +2,10 @@ package dev.aaa1115910.glyphrecorder.util
 
 import android.graphics.Bitmap
 import android.graphics.Bitmap.createBitmap
+import androidx.compose.ui.graphics.Color
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.opencv.core.Point
 import java.io.ByteArrayOutputStream
-import java.io.OutputStream
 import kotlin.system.measureTimeMillis
 
 
@@ -38,6 +39,30 @@ object BitmapUtil {
         }
         logger.info { "Hexagon count recognition took $spentTime ms" }
         return hexagonCount
+    }
+
+    /**
+     * 识别 [bitmap] 中的正六边形
+     *
+     * @return 返回正六边形的数量和黄色的位置（glyph位置指示）,如果没有黄色则返回 -1
+     */
+    suspend fun parseHexagon(bitmap: Bitmap): Pair<Int, Int> {
+        val hexagons = mutableListOf<Pair<Point, Color>>()
+        val spentTime = measureTimeMillis {
+            val topQuarter = createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height / 5)
+            hexagons.addAll(OpenCvUtil.detectHexagonsWithColor(topQuarter))
+            topQuarter.recycle()
+            logger.info { "Detected hexagons: $hexagons" }
+        }
+        val hexagonCount = hexagons.size
+        val sortedHexagons = hexagons.sortedBy { it.first.x }
+
+        // 计算离群颜色索引（基于 RGB 空间欧氏距离）
+        val glyphHexagonIndex =
+            ColorUtil.findMostDifferentColorIndex(sortedHexagons.map { it.second })
+
+        logger.info { "Hexagon count recognition took $spentTime ms" }
+        return hexagonCount to glyphHexagonIndex
     }
 }
 

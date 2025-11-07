@@ -2,6 +2,7 @@ package dev.aaa1115910.glyphrecorder
 
 import android.graphics.Bitmap.createBitmap
 import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.toArgb
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.aaa1115910.glyphrecorder.util.Circle
 import dev.aaa1115910.glyphrecorder.util.OpenCvUtil
@@ -73,15 +74,21 @@ class GlyphDetect {
         val result = listOf(0, 4, 4, 4, 4, 4, 4)
         for (i in 0..6) {
             val image = "glyph_hack_$i.png"
+            logger.info { "image: $image" }
             val bitmap = BitmapFactory.decodeStream(openInputStream(image))
             val topQuarter = createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height / 5)
-            var hexagons = 0
+            var hexagonCount = 0
             val time = measureTimeMillis {
-                hexagons = OpenCvUtil.detectHexagons(topQuarter)
+                val hexagons = OpenCvUtil.detectHexagonsWithColor(topQuarter)
+                hexagonCount = hexagons.size
+                hexagons.forEach { (point, color) ->
+                    val colorHex = String.format("#%06X", 0xFFFFFF and color.toArgb())
+                    logger.info { "Hexagon at ${point.x.toInt()} with color $colorHex" }
+                }
             }
-            logger.info { "Hexagons: $hexagons" }
+            logger.info { "Hexagon count: $hexagonCount" }
             logger.info { "Detection took $time ms" }
-            assertEquals("Hexagon $i", result[i], hexagons)
+            assertEquals("Hexagon $i", result[i], hexagonCount)
         }
     }
 

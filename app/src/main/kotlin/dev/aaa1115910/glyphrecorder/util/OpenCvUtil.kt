@@ -1,9 +1,12 @@
 package dev.aaa1115910.glyphrecorder.util
 
 import android.graphics.Bitmap
+import androidx.compose.ui.graphics.Color
+import androidx.core.graphics.createBitmap
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.opencv.android.Utils
 import org.opencv.android.Utils.bitmapToMat
+import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
@@ -12,13 +15,9 @@ import org.opencv.core.Point
 import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
-import kotlin.collections.iterator
 import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.hypot
-import androidx.core.graphics.createBitmap
-import dev.aaa1115910.glyphrecorder.App
-import java.io.File
 
 object OpenCvUtil {
     private val logger = KotlinLogging.logger { }
@@ -97,7 +96,20 @@ object OpenCvUtil {
      */
     fun detectHexagons(bitmap: Bitmap): Int {
         val image = bitmap.toMat()
-        val result = detectHexagons(image)
+        val result = detectHexagonsWithColor(image).size
+        image.release()
+        return result
+    }
+
+    /**
+     * 检测图像中的六边形
+     * @param bitmap 输入的图像位图
+     * @return 返回检测到的六边形列表，每项为(中心点, Color)
+     */
+    fun detectHexagonsWithColor(bitmap: Bitmap): List<Pair<Point, Color>> {
+        val image = bitmap.toMat()
+        val result = detectHexagonsWithColor(image)
+        println("Detected hexagons with color: $result")
         image.release()
         return result
     }
@@ -128,7 +140,16 @@ object OpenCvUtil {
         val blurredMat = gaussianBlur(grayMat, Size(9.0, 9.0), 2.0)
         grayMat.release()
         val circles =
-            houghCircles(blurredMat, Imgproc.HOUGH_GRADIENT, dp, minDist, param1, param2, minRadius, maxRadius)
+            houghCircles(
+                blurredMat,
+                Imgproc.HOUGH_GRADIENT,
+                dp,
+                minDist,
+                param1,
+                param2,
+                minRadius,
+                maxRadius
+            )
         blurredMat.release()
 
         if (circles.cols() > 0) {
@@ -158,9 +179,21 @@ object OpenCvUtil {
      * 如果没有检测到六边形，则返回0
      */
     fun detectHexagons(mat: Mat): Int {
+        val hexWithColor = detectHexagonsWithColor(mat)
+        return hexWithColor.size
+    }
+
+    /**
+     * 检测图像中的六边形并识别每个六边形的颜色（基于 HSV 平均值）
+     * @param mat 输入的图像矩阵（BGR）
+     * @return 返回检测到的六边形列表，每项为(中心点, Color)
+     */
+    fun detectHexagonsWithColor(mat: Mat): List<Pair<Point, Color>> {
+        val hsvMat = cvtColor(mat, Imgproc.COLOR_BGR2HSV)
         val grayMat = cvtColor(mat, Imgproc.COLOR_BGR2GRAY)
         val binary = threshold(grayMat, 128.0, 255.0, Imgproc.THRESH_BINARY)
         grayMat.release()
+
         val (contours, hierarchy) = findContours(
             binary,
             Imgproc.RETR_TREE,
@@ -168,24 +201,47 @@ object OpenCvUtil {
         )
         hierarchy.release()
         binary.release()
-        val hexagons = mutableListOf<MatOfPoint2f>()
+
+        val detected = mutableListOf<Pair<Point, Color>>()
+
         for (contour in contours) {
-            val approx = approxPolyDP(
-                contour.toMatOfPoint2f(),
-                0.02 * arcLength(contour.toMatOfPoint2f(), true),
-                true
-            )
-            if (approx.toList().size == 6 && isRegularHexagon(approx)) {
-                hexagons.add(approx)
-                logger.debug { "Detected hexagon with points: ${approx.toList()}" }
+            val contour2f = contour.toMatOfPoint2f()
+            val approx = approxPolyDP(contour2f, 0.02 * arcLength(contour2f, true), true)
+            contour2f.release()
+
+            val pts = approx.toList()
+            if (pts.size == 6 && isRegularHexagon(approx)) {
+                // 用多边形创建单通道掩膜，在 HSV 图上计算平均色
+                val poly = approx.toMatOfPoint()
+                val mask = Mat.zeros(mat.size(), CvType.CV_8UC1)
+                Imgproc.fillConvexPoly(mask, poly, Scalar(255.0))
+
+                val meanHSV = Core.mean(hsvMat, mask)
+                // Scalar 的字段名是 `val`，用反引号访问
+                val h = meanHSV.`val`[0].toInt()
+                val s = meanHSV.`val`[1].toInt()
+                val v = meanHSV.`val`[2].toInt()
+
+                // 计算中心点
+                val arr = poly.toArray()
+                val meanX = arr.map { it.x }.average()
+                val meanY = arr.map { it.y }.average()
+                val center = Point(meanX, meanY)
+
+                val color = hueToColor(h, s, v)
+                detected.add(Pair(center, color))
+
+                mask.release()
+                poly.release()
             }
+            approx.release()
             contour.release()
         }
 
-        val uniqueHexagons = filterOverlappingHexagons(hexagons.map { it.toMatOfPoint() })
-        hexagons.forEach { it.release() }
-        uniqueHexagons.forEach { it.release() }
-        return uniqueHexagons.size
+        hsvMat.release()
+
+        val uniqueDetected = filterOverlappingHexagonsWithColor(detected)
+        return uniqueDetected
     }
 
     /**
@@ -228,6 +284,36 @@ object OpenCvUtil {
     }
 
     /**
+     * 将HSV颜色转换为Color对象
+     * @param h 色调，范围0-179
+     * @param s 饱和度，范围0-255
+     * @param v 明度，范围0-255
+     * @return 返回对应基础的Color对象，例如Color.Yellow, Color.Cyan等
+     */
+    fun hueToColor(h: Int, s: Int, v: Int): Color {
+        val hsv = floatArrayOf(h.toFloat() * 2, s.toFloat() / 255, v.toFloat() / 255)
+        val colorInt = android.graphics.Color.HSVToColor(hsv)
+        val color = Color(colorInt)
+        return color
+        /*return when {
+            v < 50 -> Color.Black
+            s < 40 && v > 200 -> Color.White
+            s < 40 -> Color.Gray
+            h in 10..24 -> Color.Magenta
+            h in 25..34 -> Color.Yellow
+            h in 35..84 -> Color.Green
+            h in 85..99 -> Color.Cyan
+            h in 100..155 -> Color.Blue
+            h in 156..255 || h in 0..10 -> Color.Red
+            else -> Color.White
+        }.also {
+            val rgbRaw = android.graphics.Color.HSVToColor(floatArrayOf(h.toFloat() * 2, s.toFloat() / 255, v.toFloat() / 255))
+            val rgbStr= String.format("#%06X", 0xFFFFFF and rgbRaw)
+            logger.debug { "$rgbStr HSV($h, $s, $v) mapped to Color $it"}
+        }*/
+    }
+
+    /**
      * 过滤重叠的六边形
      * @param hexagons 输入的六边形列表，每个六边形以 MatOfPoint 的形式表示
      * @param minDist 最小距离，默认为20.0
@@ -263,6 +349,39 @@ object OpenCvUtil {
             }
             // 只保留每组的第一个六边形
             kept.add(hexagons[group[0]])
+        }
+        return kept
+    }
+
+    /**
+     * 过滤重叠的六边形
+     * @param hexagons 输入的六边形列表，每个六边形以 MatOfPoint 的形式表示
+     * @param minDist 最小距离，默认为20.0
+     * @return 返回过滤后的六边形列表
+     */
+    fun filterOverlappingHexagonsWithColor(
+        hexagons: List<Pair<Point, Color>>,
+        minDist: Double = 20.0
+    ): List<Pair<Point, Color>> {
+        val kept = mutableListOf<Pair<Point, Color>>()
+        val used = BooleanArray(hexagons.size) { false }
+
+        for (i in hexagons.indices) {
+            if (used[i]) continue
+            val (center1, color1) = hexagons[i]
+            val group = mutableListOf(Pair(center1, color1))
+            used[i] = true
+            for (j in hexagons.indices) {
+                if (i != j && !used[j]) {
+                    val (center2, color2) = hexagons[j]
+                    if (hypot(center1.x - center2.x, center1.y - center2.y) < minDist) {
+                        used[j] = true
+                        group.add(Pair(center2, color2))
+                    }
+                }
+            }
+            // 只保留每组的第一个六边形
+            kept.add(group[0])
         }
         return kept
     }

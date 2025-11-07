@@ -41,7 +41,7 @@ import java.text.SimpleDateFormat
 data class FloatingToolboxState(
     val context: Context,
     val scope: CoroutineScope,
-    val capturedGlyphs: SnapshotStateList<String>,
+    val capturedGlyphs: SnapshotStateList<CapturedGlyph>,
     val matchedGlyphs: SnapshotStateList<String>,
     var mediaProjectionService: MediaProjectionService?,
     val onStopAutoCapture: () -> Unit,
@@ -53,22 +53,29 @@ data class FloatingToolboxState(
 
     var targetGlyphSize = 0
 
-    val onAddGlyph: (String) -> Unit = { glyph ->
-        logger.info { "Adding glyph: $glyph" }
+    // 现在接收 name + index 两个值
+    val onAddGlyph: (String, Int) -> Unit = { glyph, glyphIndex ->
+        logger.info { "Adding glyph: $glyph index=$glyphIndex" }
         if (glyph.isNotEmpty()) {
-            capturedGlyphs.add(glyph)
-            logger.info { "Glyph added: $glyph" }
+            capturedGlyphs.add(CapturedGlyph(glyph, glyphIndex))
+            logger.info { "Glyph added: $glyph index=$glyphIndex" }
         } else {
             logger.warn { "Attempted to add an empty glyph" }
         }
 
         // check matched glyphs
         if (targetGlyphSize > 0 && capturedGlyphs.size != targetGlyphSize) {
-            val matched = GlyphData.matchSequence(targetGlyphSize, capturedGlyphs)
+            val matched = if (targetGlyphSize >= 3) {
+                GlyphData.matchSequenceWithIndex(targetGlyphSize, capturedGlyphs.toList())
+            } else {
+                // 当顶部六边形数量小于 3 时，忽略 index，只按 name 匹配
+                GlyphData.matchSequence(targetGlyphSize, capturedGlyphs.map { it.name })
+            }
             if (matched.size == 1) {
                 matchedGlyphs.clear()
                 matchedGlyphs.addAll(matched[0])
                 logger.info { "Find matched glyphs: ${matched[0]}" }
+                stopAutoCapture()
                 onStopAutoCapture()
             }
         } else {
@@ -98,7 +105,7 @@ data class FloatingToolboxState(
         onToast(context.getString(R.string.floating_window_long_time_no_glyph))
     }
 
-    suspend fun takeScreenshotAsync(): Pair<Int, String?>? {
+    suspend fun takeScreenshotAsync(): ScreenshotResult? {
         val time = System.currentTimeMillis()
         val bitmap = when (Prefs.workingMode) {
             WorkingMode.MediaProjection -> {
@@ -124,20 +131,26 @@ data class FloatingToolboxState(
         logger.info { "screenshot took ${System.currentTimeMillis() - time} ms [${Prefs.workingMode}]" }
 
         val (hexagon, glyph) = withContext(Dispatchers.IO) {
-            val hexagon = async { BitmapUtil.parseHexagonCount(bitmap) }
+            val hexagon = async { BitmapUtil.parseHexagon(bitmap) }
             val glyph = async { BitmapUtil.parseGlyph(bitmap) }
             hexagon.await() to glyph.await()
         }
         logger.info { "Screenshot taken: Hexagon=${hexagon}, Glyph=$glyph" }
-        return hexagon to glyph
+        val (hexagonCount, glyphIndex) = hexagon
+        return ScreenshotResult(
+            hexagonCount = hexagonCount,
+            glyph = glyph,
+            glyphIndex = glyphIndex
+        )
     }
 
     suspend fun takeScreenshot() {
-        val (hexagon, glyph) = takeScreenshotAsync() ?: return
+        val (hexagon, glyph, glyphIndex) = takeScreenshotAsync() ?: return
         logger.info { "hexagon: $hexagon" }
         logger.info { "glyph: $glyph" }
+        logger.info { "glyph index: $glyphIndex" }
         if (glyph != null) {
-            onAddGlyph(glyph)
+            onAddGlyph(glyph, glyphIndex)
             logger.info { "Glyph added: $glyph" }
         } else {
             logger.info { "Failed to parse glyph" }
@@ -160,7 +173,7 @@ data class FloatingToolboxState(
     suspend fun jobContent() {
         val timestamp = System.currentTimeMillis()
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(java.util.Date())
-        val (hexagon, glyph) = takeScreenshotAsync() ?: return
+        val (hexagon, glyph, glyphIndex) = takeScreenshotAsync() ?: return
         if (hexagon != 0 && glyph == null && hexagon > capturedGlyphs.size) return
 
         when (glyphCaptureState) {
@@ -203,12 +216,25 @@ data class FloatingToolboxState(
             }
         }
 
-        logger.info { "[$time] AutoCapture job content: glyphCaptureState=$glyphCaptureState, glyph=$glyph" }
-        if (autoRunning && glyphCaptureState == GlyphCaptureState.Capturing && glyph != null && capturedGlyphs.lastOrNull() != glyph) {
-            if (timestamp > lastTimestamp) {
-                onAddGlyph(glyph)
+        logger.info { "[$time] AutoCapture job content: glyphCaptureState=$glyphCaptureState, glyph=$glyph, glyphIndex=$glyphIndex" }
+        if (autoRunning && glyphCaptureState == GlyphCaptureState.Capturing && glyph != null) {
+            // 当 hexagon 数量大于等于 3 时才加入 glyph index 判断
+            if (hexagon >= 3) {
+                if (capturedGlyphs.lastOrNull()?.name != glyph || capturedGlyphs.lastOrNull()?.index != glyphIndex) {
+                    if (timestamp > lastTimestamp) {
+                        onAddGlyph(glyph, glyphIndex)
+                    } else {
+                        logger.info { "Skip adding glyph due to expired glyph: $glyph" }
+                    }
+                }
             } else {
-                logger.info { "Skip adding glyph due to expired glyph: $glyph" }
+                if (capturedGlyphs.lastOrNull()?.name != glyph) {
+                    if (timestamp > lastTimestamp) {
+                        onAddGlyph(glyph, glyphIndex)
+                    } else {
+                        logger.info { "Skip adding glyph due to expired glyph: $glyph" }
+                    }
+                }
             }
         }
     }
@@ -252,7 +278,7 @@ fun rememberFloatingToolboxState(
     val logger = KotlinLogging.logger("rememberFloatingToolboxState")
 
     var mediaProjectionService by remember { mutableStateOf<MediaProjectionService?>(null) }
-    val capturedGlyphs = remember { mutableStateListOf<String>() }
+    val capturedGlyphs = remember { mutableStateListOf<CapturedGlyph>() }
     val matchedGlyphs = remember { mutableStateListOf<String>() }
 
     val onHapticFeedback: (HapticFeedbackType) -> Unit = { type ->
@@ -305,3 +331,18 @@ fun rememberFloatingToolboxState(
         )
     }
 }
+
+data class ScreenshotResult(
+    val hexagonCount: Int,
+    val glyph: String?,
+    val glyphIndex: Int
+)
+
+data class CapturedGlyph(
+    val name: String,
+    val index: Int
+)
+
+data class CapturedGlyphSequence(
+    val glyphs: List<CapturedGlyph>
+)
