@@ -367,11 +367,32 @@ private fun StartCard(
     working: Boolean,
     onWorkingChange: (Boolean) -> Unit
 ) {
+    var isFirst by remember { mutableStateOf(true) }
+    var triggeredBySelf by remember { mutableStateOf(false) }
+
+    LaunchedEffect(working) {
+        // 忽略初次启动时的调用
+        if (isFirst) {
+            isFirst = false
+            return@LaunchedEffect
+        }
+
+        if (triggeredBySelf) {
+            triggeredBySelf = false
+        } else {
+            // 外部状态变化时调用，例如通过系统对话框结束屏幕投射
+            onWorkingChange(working)
+        }
+    }
+
     ListItem(
         modifier = modifier
             .heightIn(min = 72.dp)
             .clip(CircleShape)
-            .clickable { onWorkingChange(!working) },
+            .clickable {
+                triggeredBySelf = true
+                onWorkingChange(!working)
+            },
         headlineContent = {
             Text(
                 modifier = Modifier.padding(start = 12.dp),
@@ -384,7 +405,10 @@ private fun StartCard(
             Switch(
                 modifier = Modifier.padding(end = 8.dp),
                 checked = working,
-                onCheckedChange = { onWorkingChange(it) },
+                onCheckedChange = {
+                    triggeredBySelf = true
+                    onWorkingChange(it)
+                },
             )
         },
         colors = ListItemDefaults.colors(

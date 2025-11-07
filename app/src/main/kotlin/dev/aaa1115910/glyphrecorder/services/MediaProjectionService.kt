@@ -21,6 +21,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.hardware.display.DisplayManagerCompat
 import dev.aaa1115910.glyphrecorder.App
 import dev.aaa1115910.glyphrecorder.R
+import dev.aaa1115910.glyphrecorder.util.Prefs
 import dev.aaa1115910.glyphrecorder.util.toBitmap
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +44,12 @@ class MediaProjectionService : Service() {
         private const val NOTIFICATION_ID = 1
 
         private val MEDIA_PROJECTION_CALLBACK: MediaProjection.Callback =
-            object : MediaProjection.Callback() {}
+            object : MediaProjection.Callback() {
+                override fun onStop() {
+                    logger.info { "Media projection stopped by system" }
+                    Prefs.working = false
+                }
+            }
 
         private val logger = KotlinLogging.logger { }
     }
