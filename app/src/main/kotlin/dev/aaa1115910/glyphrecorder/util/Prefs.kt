@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dev.aaa1115910.glyphrecorder.App
@@ -70,6 +71,15 @@ object PrefKeys {
     val floatingWindowFirstTipShownKey = booleanPreferencesKey("floating_window_first_tip_shown")
     val floatingWindowFirstTipShownRequest =
         PreferenceRequest(floatingWindowFirstTipShownKey, false)
+
+    val hexagonAreaTopYKey = intPreferencesKey("hexagon_area_top_y")
+    val hexagonAreaTopYRequest = PreferenceRequest(hexagonAreaTopYKey, 0)
+
+    val hexagonAreaBottomYKey = intPreferencesKey("hexagon_area_bottom_y")
+    val hexagonAreaBottomYRequest = PreferenceRequest(hexagonAreaBottomYKey, 0)
+
+    val lastVersionCodeKey = longPreferencesKey("last_version_code")
+    val lastVersionCodeRequest = PreferenceRequest(lastVersionCodeKey, 0)
 }
 
 object Prefs {
@@ -116,5 +126,23 @@ object Prefs {
         get() = dataStore.getPreferenceSync(PrefKeys.floatingWindowFirstTipShownRequest)
         set(value) {
             dataStore.editPreferenceSync(PrefKeys.floatingWindowFirstTipShownKey, value)
+        }
+
+    var hexagonAreaTopY: Int
+        get() = dataStore.getPreferenceSync(PrefKeys.hexagonAreaTopYRequest)
+        set(value) {
+            dataStore.editPreferenceSync(PrefKeys.hexagonAreaTopYKey, value.coerceAtLeast(0))
+        }
+
+    var hexagonAreaBottomY: Int
+        get() = dataStore.getPreferenceSync(PrefKeys.hexagonAreaBottomYRequest)
+        set(value) {
+            dataStore.editPreferenceSync(PrefKeys.hexagonAreaBottomYKey, value.coerceAtLeast(1))
+        }
+
+    var lastVersionCode: Long
+        get() = dataStore.getPreferenceSync(PrefKeys.lastVersionCodeRequest)
+        set(value) {
+            dataStore.editPreferenceSync(PrefKeys.lastVersionCodeKey, value)
         }
 }

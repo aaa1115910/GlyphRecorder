@@ -32,9 +32,9 @@ object BitmapUtil {
     suspend fun parseHexagonCount(bitmap: Bitmap): Int {
         var hexagonCount = 0
         val spentTime = measureTimeMillis {
-            val topQuarter = createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height / 5)
-            hexagonCount = OpenCvUtil.detectHexagons(topQuarter)
-            topQuarter.recycle()
+            val hexagonBitmap = clipHexagonBitmap(bitmap)
+            hexagonCount = OpenCvUtil.detectHexagons(hexagonBitmap)
+            hexagonBitmap.recycle()
             logger.info { "Detected hexagon counts: $hexagonCount" }
         }
         logger.info { "Hexagon count recognition took $spentTime ms" }
@@ -49,9 +49,9 @@ object BitmapUtil {
     suspend fun parseHexagon(bitmap: Bitmap): Pair<Int, Int> {
         val hexagons = mutableListOf<Pair<Point, Color>>()
         val spentTime = measureTimeMillis {
-            val topQuarter = createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height / 5)
-            hexagons.addAll(OpenCvUtil.detectHexagonsWithColor(topQuarter))
-            topQuarter.recycle()
+            val hexagonBitmap = clipHexagonBitmap(bitmap)
+            hexagons.addAll(OpenCvUtil.detectHexagonsWithColor(hexagonBitmap))
+            hexagonBitmap.recycle()
             logger.info { "Detected hexagons: $hexagons" }
         }
         val hexagonCount = hexagons.size
@@ -64,6 +64,20 @@ object BitmapUtil {
         logger.info { "Hexagon count recognition took $spentTime ms" }
         return hexagonCount to glyphHexagonIndex
     }
+
+    /**
+     * 从 [bitmap] 中裁剪出用户设置的序列区域 [Bitmap]
+     *
+     * @return 裁剪后的 [Bitmap]
+     */
+    private fun clipHexagonBitmap(bitmap: Bitmap): Bitmap {
+        val topY = Prefs.hexagonAreaTopY.coerceIn(0, bitmap.height - 1)
+        val bottomY = Prefs.hexagonAreaBottomY.coerceIn(topY + 1, bitmap.height)
+        val cropHeight = bottomY - topY
+        println("Clipping bitmap: topY=$topY, bottomY=$bottomY, cropHeight=$cropHeight")
+        return createBitmap(bitmap, 0, topY, bitmap.width, cropHeight)
+    }
+
 }
 
 /**

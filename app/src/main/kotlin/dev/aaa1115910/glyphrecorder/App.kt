@@ -19,6 +19,7 @@ class App : Application() {
         super.onCreate()
         context = applicationContext
         HandroidLoggerAdapter.DEBUG = BuildConfig.DEBUG
+        checkVersionChanged()
         initOpenCv()
     }
 
@@ -26,5 +27,13 @@ class App : Application() {
         System.loadLibrary("opencv_java4")
         OpenCvUtil.updatePrefCircles(Prefs.circles)
         GlyphData.initGlyphData(context)
+    }
+
+    private fun checkVersionChanged() {
+        if (BuildConfig.VERSION_CODE <= Prefs.lastVersionCode) return
+        if (Prefs.lastVersionCode <= 2) {
+            Prefs.circles = emptyList()
+        }
+        Prefs.lastVersionCode = BuildConfig.VERSION_CODE.toLong()
     }
 }

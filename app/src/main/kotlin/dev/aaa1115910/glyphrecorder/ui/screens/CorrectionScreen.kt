@@ -12,6 +12,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -30,6 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
@@ -50,6 +53,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,12 +62,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -74,6 +83,8 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.aaa1115910.glyphrecorder.R
@@ -115,6 +126,9 @@ fun CorrectionScreen(modifier: Modifier = Modifier) {
         )
     }
 
+    var hexagonAreaTopY by rememberSaveable { mutableIntStateOf(Prefs.hexagonAreaTopY) }
+    var hexagonAreaBottomY by rememberSaveable { mutableIntStateOf(Prefs.hexagonAreaBottomY) }
+
     val photoPickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri != null) {
@@ -137,6 +151,8 @@ fun CorrectionScreen(modifier: Modifier = Modifier) {
 
     val onSave = {
         Prefs.circles = confirmedCircles
+        Prefs.hexagonAreaTopY = hexagonAreaTopY
+        Prefs.hexagonAreaBottomY = hexagonAreaBottomY
         OpenCvUtil.updatePrefCircles(confirmedCircles)
         context.getString(R.string.correction_screen_save_success).toast(context)
     }
@@ -217,7 +233,11 @@ fun CorrectionScreen(modifier: Modifier = Modifier) {
         onClearConfirmedCircles = onClearConfirmedCircles,
         onShowOpenCvParamsPanel = { showOpenCvParamsPanel = true },
         onHideOpenCvParamsPanel = { showOpenCvParamsPanel = false },
-        onChangeOpenCvHoughCirclesParams = { openCvHoughCirclesParams = it }
+        onChangeOpenCvHoughCirclesParams = { openCvHoughCirclesParams = it },
+        onHexagonAreaChange = { topY, bottomY ->
+            hexagonAreaTopY = topY
+            hexagonAreaBottomY = bottomY
+        }
     )
 }
 
@@ -238,7 +258,8 @@ private fun CorrectionScreenContent(
     onClearConfirmedCircles: () -> Unit,
     onShowOpenCvParamsPanel: () -> Unit,
     onHideOpenCvParamsPanel: () -> Unit,
-    onChangeOpenCvHoughCirclesParams: (OpenCvHoughCirclesParams) -> Unit
+    onChangeOpenCvHoughCirclesParams: (OpenCvHoughCirclesParams) -> Unit,
+    onHexagonAreaChange: (Int, Int) -> Unit
 ) {
     val saveAvailable by remember { derivedStateOf { confirmedCircles.size == 11 } }
 
@@ -289,7 +310,8 @@ private fun CorrectionScreenContent(
                 image = screenshotBitmap,
                 screenshotCircles = screenshotCircles,
                 confirmedCircles = confirmedCircles,
-                onConfirmClick = onConfirmClick
+                onConfirmClick = onConfirmClick,
+                onHexagonAreaChange = onHexagonAreaChange
             )
             AnimatedVisibility(showOpenCvParamsPanel) {
                 OpenCvParamsPanel(
@@ -351,11 +373,18 @@ private fun CorrectionPreview(
     image: Bitmap?,
     screenshotCircles: List<Pair<Int, Int>>,
     confirmedCircles: List<Pair<Int, Int>>,
-    onConfirmClick: (Int, Int) -> Unit
+    onConfirmClick: (Int, Int) -> Unit,
+    onHexagonAreaChange: (Int, Int) -> Unit
 ) {
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
     val textMeasurer = rememberTextMeasurer()
+
+    val hexagonAreaHeight = 80.dp
+    val hexagonAreaDragBoxHeightPx = with(density) { hexagonAreaHeight.toPx() }
+    var hexagonAreaDragBoxOffsetYPx by remember { mutableFloatStateOf(0f) }
+    var previewHeightPx by remember { mutableFloatStateOf(0f) }
+    var imageBitmapHeight by remember { mutableFloatStateOf(0f) }
 
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
@@ -367,6 +396,14 @@ private fun CorrectionPreview(
         if (image == null) return@LaunchedEffect
         screenWidthPx = image.width.toFloat()
         screenHeightPx = image.height.toFloat()
+        imageBitmapHeight = image.height.toFloat()
+    }
+
+    fun publishAreaBounds() {
+        val scaleY = imageBitmapHeight / previewHeightPx
+        val areaTopY = hexagonAreaDragBoxOffsetYPx * scaleY
+        val areaBottomY = (hexagonAreaDragBoxOffsetYPx + hexagonAreaDragBoxHeightPx) * scaleY
+        onHexagonAreaChange(areaTopY.toInt(), areaBottomY.toInt())
     }
 
     Box(
@@ -375,6 +412,11 @@ private fun CorrectionPreview(
             .aspectRatio(if (image == null) screenAspectRatio else bitmapAspectRatio)
             .clip(MaterialTheme.shapes.large)
             .background(MaterialTheme.colorScheme.surfaceBright)
+            .onSizeChanged {
+                previewHeightPx = it.height.toFloat()
+                hexagonAreaDragBoxOffsetYPx = 0f
+                publishAreaBounds()
+            }
             .pointerInput(screenshotCircles, confirmedCircles) {
                 detectTapGestures { offset ->
                     println("Tapped at: $offset")
@@ -447,7 +489,81 @@ private fun CorrectionPreview(
                 }
             }
         }
+
+        if (image != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset { IntOffset(x = 0, y = hexagonAreaDragBoxOffsetYPx.toInt()) }
+                    .fillMaxWidth()
+                    .height(hexagonAreaHeight)
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .drawBehind {
+                        drawDashedBorder(
+                            color = Color.Red,
+                            strokeWidth = 2.dp,
+                            dashWidth = 8.dp,
+                            gapWidth = 8.dp
+                        )
+                    }
+                    .pointerInput(previewHeightPx) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            val maxOffset =
+                                (previewHeightPx - hexagonAreaDragBoxHeightPx).coerceAtLeast(0f)
+                            hexagonAreaDragBoxOffsetYPx =
+                                (hexagonAreaDragBoxOffsetYPx + dragAmount.y).coerceIn(0f, maxOffset)
+                            publishAreaBounds()
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.OpenWith,
+                        contentDescription = null,
+                        tint = Color.White
+                    )
+                    Text(
+                        text= stringResource(R.string.correction_screen_image_preview_sequence_area),
+                        color = Color.White
+                    )
+                }
+            }
+        }
     }
+}
+
+/**
+ * 绘制虚线边框的辅助函数
+ * @param color 边框颜色
+ * @param strokeWidth 边框宽度
+ * @param dashWidth 虚线段的长度
+ * @param gapWidth 虚线段之间的间隔长度
+ */
+private fun DrawScope.drawDashedBorder(
+    color: Color,
+    strokeWidth: Dp = 1.dp,
+    dashWidth: Dp = 4.dp,
+    gapWidth: Dp = 4.dp
+) {
+    val strokePx = strokeWidth.toPx()
+    val dashPx = dashWidth.toPx()
+    val gapPx = gapWidth.toPx()
+
+    val pathEffect = PathEffect.dashPathEffect(
+        intervals = floatArrayOf(dashPx, gapPx),
+        phase = 0f
+    )
+
+    drawRect(
+        color = color,
+        topLeft = Offset(strokePx / 2, strokePx / 2),
+        size = Size(size.width - strokePx, size.height - strokePx),
+        style = Stroke(width = strokePx, pathEffect = pathEffect)
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -628,7 +744,8 @@ private fun CorrectionScreenPreview(modifier: Modifier = Modifier) {
             onClearConfirmedCircles = {},
             onShowOpenCvParamsPanel = { showOpenCvParamsPanel = true },
             onHideOpenCvParamsPanel = { showOpenCvParamsPanel = false },
-            onChangeOpenCvHoughCirclesParams = { openCvHoughCirclesParams = it }
+            onChangeOpenCvHoughCirclesParams = { openCvHoughCirclesParams = it },
+            onHexagonAreaChange = { _, _ -> }
         )
     }
 }

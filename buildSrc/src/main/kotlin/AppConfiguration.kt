@@ -3,7 +3,7 @@ object AppConfiguration {
     const val minSdk = 30
     const val targerSdk = 36
     const val compileSdk = 36
-    const val versionCode = 2
+    const val versionCode = 3
     private val recursionAndLevel = calculateRecursionAndLevel(versionCode)
     val recursion get() = recursionAndLevel.first
     val level get() = recursionAndLevel.second
