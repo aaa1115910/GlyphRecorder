@@ -43,6 +43,15 @@ class ScreenCaptureService : IScreenCaptureService.Stub() {
         return surfaceCapture != null && mImageReader != null
     }
 
+    override fun stopScreenCapture() {
+        log("Stopping screen capture")
+        closeResources()
+    }
+
+    override fun isScreenCaptureRunning(): Boolean {
+        return surfaceCapture != null && mImageReader != null
+    }
+
     fun closeResources() {
         log("Closing resources")
         mImageAvailable = false

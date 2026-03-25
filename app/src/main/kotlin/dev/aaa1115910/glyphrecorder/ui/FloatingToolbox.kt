@@ -2,7 +2,9 @@ package dev.aaa1115910.glyphrecorder.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.graphics.Rect
+import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
@@ -58,14 +61,24 @@ import com.github.only52607.compose.window.ComposeFloatingWindow
 import com.github.only52607.compose.window.LocalFloatingWindow
 import dev.aaa1115910.glyphrecorder.BuildConfig
 import dev.aaa1115910.glyphrecorder.R
+import dev.aaa1115910.glyphrecorder.WorkingMode
+import dev.aaa1115910.glyphrecorder.services.MediaProjectionService
+import dev.aaa1115910.glyphrecorder.services.WorkingQuickSettingsTileService
 import dev.aaa1115910.glyphrecorder.ui.components.GlyphImage
+import dev.aaa1115910.glyphrecorder.util.FloatingWindowController
 import dev.aaa1115910.glyphrecorder.util.Prefs
+import dev.aaa1115910.glyphrecorder.util.SmartDisplayCoordinator
+import dev.aaa1115910.glyphrecorder.util.WorkingSessionController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 
 fun createFloatingToolbox(applicationContext: Context): ComposeFloatingWindow =
     ComposeFloatingWindow(applicationContext).apply {
+        windowParams.flags = windowParams.flags or
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        windowParams.flags = windowParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
 
         // 设置初始位置
         val resetPosition = {
@@ -90,9 +103,9 @@ fun createFloatingToolbox(applicationContext: Context): ComposeFloatingWindow =
 private fun FloatingToolbox(
     resetPosition: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    val floatingWindow = LocalFloatingWindow.current
     var expanded by remember { mutableStateOf(false) }
     var autoCapturing by remember { mutableStateOf(false) }
     var showCloseTip by remember { mutableStateOf(false) }
@@ -132,9 +145,12 @@ private fun FloatingToolbox(
             state.onClearGlyphs()
         },
         onClose = {
-            floatingWindow.hide()
+            FloatingWindowController.hide(context)
             resetPosition()
             Prefs.working = false
+            WorkingQuickSettingsTileService.requestStateSync(context)
+            WorkingSessionController.stopCurrentSession(context)
+            SmartDisplayCoordinator.onManualClose()
         },
         onCloseAreaStateChange = { showCloseTip = it }
     )
