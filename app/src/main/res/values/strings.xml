@@ -20,6 +20,10 @@
     <string name="home_screen_correction">校准定位</string>
     <string name="home_screen_start_service">启动服务</string>
     <string name="home_screen_stop_service">停止服务</string>
+    <string name="home_screen_smart_display">智能显示悬浮窗</string>
+    <string name="home_screen_smart_display_summary">开启后仅在 Ingress 前台自动显示悬浮窗</string>
+    <string name="home_screen_detector_permission">检测权限状态</string>
+    <string name="home_screen_battery_optimization">电池优化豁免</string>
     <string name="home_screen_update">软件更新</string>
     <string name="home_screen_update_summary">让您的 Glyph Recorder 更臻完善</string>
     <string name="home_screen_version">软件版本</string>
@@ -36,4 +40,20 @@
 
     <string name="working_mode_media_projection">媒体投影</string>
     <string name="working_mode_shizuku">Shizuku</string>
+
+    <string name="detector_permission_granted">已授权</string>
+    <string name="detector_permission_required_accessibility">未授权无障碍，请前往系统设置开启</string>
+    <string name="battery_optimization_ignored">已加入电池优化白名单</string>
+    <string name="battery_optimization_required">未加入白名单，建议关闭电池优化</string>
+
+    <string name="detector_unavailable_title">智能显示不可用</string>
+    <string name="detector_unavailable_accessibility">当前未开启无障碍权限。你可以先去授权，或关闭智能显示。</string>
+    <string name="detector_unavailable_grant_permission">去授权</string>
+    <string name="detector_unavailable_disable_smart_display">关闭智能显示</string>
+
+    <string name="accessibility_service_description">用于检测 Ingress 前台状态并自动显示悬浮窗</string>
+    <string name="quick_tile_working_label">Glyph Recorder</string>
+    <string name="quick_tile_need_overlay_permission">请先授予悬浮窗权限</string>
+    <string name="quick_tile_media_projection_need_app_start">MediaProjection 模式请在应用内启动一次服务</string>
+    <string name="quick_tile_connecting_shizuku">正在连接 Shizuku…</string>
 </resources>

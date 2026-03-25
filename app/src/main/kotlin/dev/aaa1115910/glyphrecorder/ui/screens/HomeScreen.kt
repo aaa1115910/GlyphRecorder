@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Screenshot
 import androidx.compose.material.icons.outlined.SecurityUpdate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
@@ -33,8 +34,10 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -52,50 +55,79 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import dev.aaa1115910.glyphrecorder.util.openHackEmulator
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.aaa1115910.glyphrecorder.BuildConfig
 import dev.aaa1115910.glyphrecorder.R
 import dev.aaa1115910.glyphrecorder.WorkingMode
 import dev.aaa1115910.glyphrecorder.activities.CorrectionActivity
 import dev.aaa1115910.glyphrecorder.services.MediaProjectionService
+import dev.aaa1115910.glyphrecorder.services.WorkingQuickSettingsTileService
 import dev.aaa1115910.glyphrecorder.ui.GlyphRecorderTheme
 import dev.aaa1115910.glyphrecorder.ui.components.preferences.items.radioPreference
+import dev.aaa1115910.glyphrecorder.ui.components.preferences.items.switchPreference
 import dev.aaa1115910.glyphrecorder.ui.components.preferences.items.textPreference
 import dev.aaa1115910.glyphrecorder.ui.components.preferences.preferenceGroups
+import dev.aaa1115910.glyphrecorder.util.DetectorPermissionUtil
 import dev.aaa1115910.glyphrecorder.util.GithubApi
 import dev.aaa1115910.glyphrecorder.util.PrefKeys
 import dev.aaa1115910.glyphrecorder.util.Prefs
 import dev.aaa1115910.glyphrecorder.util.RELEASE_URL
 import dev.aaa1115910.glyphrecorder.util.ShizukuConfig
+import dev.aaa1115910.glyphrecorder.util.SmartDisplayCoordinator
+import dev.aaa1115910.glyphrecorder.util.WorkingSessionController
 import dev.aaa1115910.glyphrecorder.util.dataStore
 import dev.aaa1115910.glyphrecorder.util.getPreferenceAsState
+import dev.aaa1115910.glyphrecorder.util.openHackEmulator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-
 @Composable
 fun HomeScreen(
-    modifier: Modifier = Modifier,
-    onShowFloatingToolbox: () -> Unit,
-    onCloseFloatingToolbox: () -> Unit
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val logger = KotlinLogging.logger("HomeScreen")
 
     var initialized by rememberSaveable { mutableStateOf(false) }
     val working by context.dataStore.getPreferenceAsState(PrefKeys.workingRequest)
     val workingModeOrdinal by context.dataStore.getPreferenceAsState(PrefKeys.workingModeRequest)
+    val smartDisplayEnabled by context.dataStore.getPreferenceAsState(PrefKeys.smartDisplayEnabledRequest)
     val workingMode by remember {
         derivedStateOf { WorkingMode.entries[workingModeOrdinal] }
     }
     var hasUpdate by remember { mutableStateOf(false) }
+    var showDetectorUnavailableDialog by rememberSaveable { mutableStateOf(false) }
+    var detectorAvailable by remember { mutableStateOf(SmartDisplayCoordinator.isCurrentDetectorAvailable()) }
+    var batteryOptimizationIgnored by remember {
+        mutableStateOf(DetectorPermissionUtil.isIgnoringBatteryOptimizations(context))
+    }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    fun refreshPermissionState() {
+        detectorAvailable = SmartDisplayCoordinator.isCurrentDetectorAvailable()
+        batteryOptimizationIgnored = DetectorPermissionUtil.isIgnoringBatteryOptimizations(context)
+    }
 
     fun updateWorking(value: Boolean) {
         Prefs.working = value
+        WorkingQuickSettingsTileService.requestStateSync(context)
+    }
+
+    fun updateSmartDisplayEnabled(value: Boolean) {
+        Prefs.smartDisplayEnabled = value
+    }
+
+    fun syncWorkingMode() {
+        SmartDisplayCoordinator.onWorkingModeChanged(
+            working = Prefs.working,
+            smartDisplayEnabled = Prefs.smartDisplayEnabled
+        )
     }
 
     val showSnackbarMessage: (String) -> Unit = { message ->
@@ -109,16 +141,13 @@ fun HomeScreen(
     ) {
         logger.info { "mediaProjectionRequestLauncher result is ok: ${it.resultCode == Activity.RESULT_OK}" }
         if (it.resultCode == Activity.RESULT_OK) {
-            //Toast.makeText(context, "ok", Toast.LENGTH_SHORT).show()
-
             if (working) return@rememberLauncherForActivityResult
             MediaProjectionService.resultCode = it.resultCode
             MediaProjectionService.resultData = it.data
             context.startForegroundService(Intent(context, MediaProjectionService::class.java))
             updateWorking(true)
-            onShowFloatingToolbox()
+            syncWorkingMode()
         } else {
-            //Toast.makeText(context, "failed", Toast.LENGTH_SHORT).show()
             logger.info { "MediaProjection request failed" }
             showSnackbarMessage(context.getString(R.string.start_service_failed_media_projection))
         }
@@ -127,7 +156,6 @@ fun HomeScreen(
     val overlayPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
-        // 可在此处处理权限结果
         if (Settings.canDrawOverlays(context)) {
             logger.info { "request overlay permission success" }
             showSnackbarMessage(context.getString(R.string.overlay_permission_success))
@@ -147,6 +175,10 @@ fun HomeScreen(
         } else {
             showSnackbarMessage(context.getString(R.string.overlay_permission_success))
         }
+    }
+
+    fun requestAccessibilityPermission() {
+        DetectorPermissionUtil.openAccessibilitySettings(context)
     }
 
     val launchCorrectionActivity = {
@@ -175,15 +207,13 @@ fun HomeScreen(
 
                 WorkingMode.Shizuku -> {
                     val launchService = {
-                        // 更新 ScreenCaptureService 的坐标信息
                         val circlesRawString =
                             Prefs.circles.joinToString(",") { "${it.first}:${it.second}" }
                         ShizukuConfig.screenCaptureService!!.updateCircles(circlesRawString)
-                        // 启动 ScreenCaptureService
                         val startResult = ShizukuConfig.screenCaptureService!!.startScreenCapture()
                         if (startResult) {
                             updateWorking(true)
-                            onShowFloatingToolbox()
+                            syncWorkingMode()
                         } else {
                             showSnackbarMessage(context.getString(R.string.start_service_failed_shizuku))
                             logger.error { "Failed to start Shizuku ScreenCaptureService" }
@@ -205,28 +235,29 @@ fun HomeScreen(
     val onStop = {
         logger.info { "stop service, working mode: $workingMode" }
         haptic.performHapticFeedback(HapticFeedbackType.ToggleOff)
-        when (workingMode) {
-            WorkingMode.MediaProjection -> {
-                updateWorking(false)
-                onCloseFloatingToolbox()
-            }
-
-            WorkingMode.Shizuku -> {
-                updateWorking(false)
-                onCloseFloatingToolbox()
-            }
-        }
+        updateWorking(false)
+        WorkingSessionController.stopCurrentSession(context)
+        syncWorkingMode()
     }
 
     val onWorkingChange: (Boolean) -> Unit = {
-        if (Settings.canDrawOverlays(context)) {
-            if (it) {
+        if (it) {
+            if (Settings.canDrawOverlays(context)) {
                 onStart()
             } else {
-                onStop()
+                requestOverlayPermission()
             }
         } else {
-            requestOverlayPermission()
+            onStop()
+        }
+    }
+
+    val onSmartDisplayChange: (Boolean) -> Unit = { newValue ->
+        if (newValue && !SmartDisplayCoordinator.isCurrentDetectorAvailable()) {
+            showDetectorUnavailableDialog = true
+        } else {
+            updateSmartDisplayEnabled(newValue)
+            syncWorkingMode()
         }
     }
 
@@ -252,23 +283,69 @@ fun HomeScreen(
         logger.info { "Open release page: $releaseUrl" }
     }
 
+    val onOpenBatteryOptimizationSettings: () -> Unit = {
+        if (DetectorPermissionUtil.isIgnoringBatteryOptimizations(context)) {
+            DetectorPermissionUtil.openBatteryOptimizationSettings(context)
+        } else {
+            DetectorPermissionUtil.requestIgnoreBatteryOptimization(context)
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (!initialized) {
-            Prefs.working = false
             checkUpdate()
         }
         initialized = true
+        refreshPermissionState()
+        SmartDisplayCoordinator.onAppStarted()
+    }
+
+    LaunchedEffect(working, smartDisplayEnabled) {
+        syncWorkingMode()
+    }
+
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshPermissionState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     HomeScreenContent(
         modifier = modifier,
         working = working,
+        smartDisplayEnabled = smartDisplayEnabled,
         hasUpdate = hasUpdate,
+        detectorAvailable = detectorAvailable,
+        batteryOptimizationIgnored = batteryOptimizationIgnored,
         snackbarHostState = snackbarHostState,
         onWorkingChange = onWorkingChange,
+        onSmartDisplayChange = onSmartDisplayChange,
+        onOpenDetectorPermissionSettings = { requestAccessibilityPermission() },
+        onOpenBatteryOptimizationSettings = onOpenBatteryOptimizationSettings,
         onCorrection = launchCorrectionActivity,
         onOpenReleasePage = onOpenReleasePage
     )
+
+    if (showDetectorUnavailableDialog) {
+        DetectorUnavailableDialog(
+            onDismissRequest = { showDetectorUnavailableDialog = false },
+            onGrantPermission = {
+                showDetectorUnavailableDialog = false
+                requestAccessibilityPermission()
+            },
+            onDisableSmartDisplay = {
+                showDetectorUnavailableDialog = false
+                updateSmartDisplayEnabled(false)
+                syncWorkingMode()
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -276,13 +353,30 @@ fun HomeScreen(
 private fun HomeScreenContent(
     modifier: Modifier = Modifier,
     working: Boolean,
+    smartDisplayEnabled: Boolean,
     hasUpdate: Boolean,
+    detectorAvailable: Boolean,
+    batteryOptimizationIgnored: Boolean,
     snackbarHostState: SnackbarHostState,
     onWorkingChange: (Boolean) -> Unit,
+    onSmartDisplayChange: (Boolean) -> Unit,
+    onOpenDetectorPermissionSettings: () -> Unit,
+    onOpenBatteryOptimizationSettings: () -> Unit,
     onCorrection: () -> Unit,
     onOpenReleasePage: () -> Unit
 ) {
     val context = LocalContext.current
+    val detectorPermissionSummary = if (detectorAvailable) {
+        context.getString(R.string.detector_permission_granted)
+    } else {
+        context.getString(R.string.detector_permission_required_accessibility)
+    }
+
+    val batterySummary = if (batteryOptimizationIgnored) {
+        context.getString(R.string.battery_optimization_ignored)
+    } else {
+        context.getString(R.string.battery_optimization_required)
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -323,6 +417,22 @@ private fun HomeScreenContent(
                                             context.getString(R.string.working_mode_shizuku)
                                 )
                             )
+                            switchPreference(
+                                title = context.getString(R.string.home_screen_smart_display),
+                                summary = context.getString(R.string.home_screen_smart_display_summary),
+                                checked = smartDisplayEnabled,
+                                onCheckedChange = onSmartDisplayChange
+                            )
+                            textPreference(
+                                title = context.getString(R.string.home_screen_detector_permission),
+                                summary = detectorPermissionSummary,
+                                onClick = onOpenDetectorPermissionSettings
+                            )
+                            textPreference(
+                                title = context.getString(R.string.home_screen_battery_optimization),
+                                summary = batterySummary,
+                                onClick = onOpenBatteryOptimizationSettings
+                            )
                             textPreference(
                                 title = context.getString(R.string.home_screen_correction),
                                 icon = Icons.Default.MyLocation,
@@ -362,6 +472,33 @@ private fun HomeScreenContent(
 }
 
 @Composable
+private fun DetectorUnavailableDialog(
+    onDismissRequest: () -> Unit,
+    onGrantPermission: () -> Unit,
+    onDisableSmartDisplay: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = {
+            Text(text = stringResource(R.string.detector_unavailable_title))
+        },
+        text = {
+            Text(text = stringResource(R.string.detector_unavailable_accessibility))
+        },
+        confirmButton = {
+            TextButton(onClick = onGrantPermission) {
+                Text(text = stringResource(R.string.detector_unavailable_grant_permission))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDisableSmartDisplay) {
+                Text(text = stringResource(R.string.detector_unavailable_disable_smart_display))
+            }
+        }
+    )
+}
+
+@Composable
 private fun StartCard(
     modifier: Modifier = Modifier,
     working: Boolean,
@@ -371,7 +508,6 @@ private fun StartCard(
     var triggeredBySelf by remember { mutableStateOf(false) }
 
     LaunchedEffect(working) {
-        // 忽略初次启动时的调用
         if (isFirst) {
             isFirst = false
             return@LaunchedEffect
@@ -380,7 +516,6 @@ private fun StartCard(
         if (triggeredBySelf) {
             triggeredBySelf = false
         } else {
-            // 外部状态变化时调用，例如通过系统对话框结束屏幕投射
             onWorkingChange(working)
         }
     }
@@ -440,14 +575,21 @@ private fun StartCardPreview() {
 @Composable
 private fun HomeScreenPreview() {
     var working by remember { mutableStateOf(false) }
+    var smartDisplayEnabled by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     GlyphRecorderTheme {
         HomeScreenContent(
             working = working,
+            smartDisplayEnabled = smartDisplayEnabled,
             hasUpdate = true,
+            detectorAvailable = false,
+            batteryOptimizationIgnored = false,
             snackbarHostState = snackbarHostState,
             onWorkingChange = { working = it },
+            onSmartDisplayChange = { smartDisplayEnabled = it },
+            onOpenDetectorPermissionSettings = {},
+            onOpenBatteryOptimizationSettings = {},
             onCorrection = {},
             onOpenReleasePage = {}
         )

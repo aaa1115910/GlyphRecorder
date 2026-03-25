@@ -22,6 +22,7 @@ import androidx.core.hardware.display.DisplayManagerCompat
 import dev.aaa1115910.glyphrecorder.App
 import dev.aaa1115910.glyphrecorder.R
 import dev.aaa1115910.glyphrecorder.util.Prefs
+import dev.aaa1115910.glyphrecorder.util.SmartDisplayCoordinator
 import dev.aaa1115910.glyphrecorder.util.toBitmap
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,11 @@ class MediaProjectionService : Service() {
                 override fun onStop() {
                     logger.info { "Media projection stopped by system" }
                     Prefs.working = false
+                    WorkingQuickSettingsTileService.requestStateSync(App.context)
+                    SmartDisplayCoordinator.onWorkingModeChanged(
+                        working = Prefs.working,
+                        smartDisplayEnabled = Prefs.smartDisplayEnabled
+                    )
                 }
             }
 
@@ -89,7 +95,7 @@ class MediaProjectionService : Service() {
     override fun onDestroy() {
         logger.info { "on destroy service" }
         super.onDestroy()
-        //stopRecording()
+        stopRecording()
 
         resultCode = 0
         resultData = null
@@ -102,7 +108,6 @@ class MediaProjectionService : Service() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         logger.info { "on unbind service" }
-        stopService()
         return super.onUnbind(intent)
     }
 

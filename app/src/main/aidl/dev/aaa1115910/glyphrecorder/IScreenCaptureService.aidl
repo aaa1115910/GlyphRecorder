@@ -5,6 +5,8 @@ package dev.aaa1115910.glyphrecorder;
 
 interface IScreenCaptureService {
     boolean startScreenCapture() = 1;
+    void stopScreenCapture() = 2;
     void updateCircles(String circles) = 3;
     byte[] takeScreenshotBitmapArray() = 4;
+    boolean isScreenCaptureRunning() = 5;
 }

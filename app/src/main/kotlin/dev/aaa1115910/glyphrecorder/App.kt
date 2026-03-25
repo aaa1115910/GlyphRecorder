@@ -6,6 +6,8 @@ import android.content.Context
 import dev.aaa1115910.glyphrecorder.util.GlyphData
 import dev.aaa1115910.glyphrecorder.util.OpenCvUtil
 import dev.aaa1115910.glyphrecorder.util.Prefs
+import dev.aaa1115910.glyphrecorder.util.SmartDisplayCoordinator
+import dev.aaa1115910.glyphrecorder.util.WorkingSessionController
 import org.slf4j.impl.HandroidLoggerAdapter
 
 class App : Application() {
@@ -20,6 +22,8 @@ class App : Application() {
         context = applicationContext
         HandroidLoggerAdapter.DEBUG = BuildConfig.DEBUG
         checkVersionChanged()
+        WorkingSessionController.reconcilePersistedWorkingState()
+        SmartDisplayCoordinator.onAppStarted()
         initOpenCv()
     }
 

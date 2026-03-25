@@ -60,6 +60,9 @@ object PrefKeys {
     val workingModeKey = intPreferencesKey("working_mode")
     val workingModeRequest = PreferenceRequest(workingModeKey, WorkingMode.MediaProjection.ordinal)
 
+    val smartDisplayEnabledKey = booleanPreferencesKey("smart_display_enabled")
+    val smartDisplayEnabledRequest = PreferenceRequest(smartDisplayEnabledKey, false)
+
     val circlesKey = stringPreferencesKey("circles")
     val circlesRequest = PreferenceRequest(circlesKey, "")
 
@@ -95,6 +98,12 @@ object Prefs {
         get() = WorkingMode.entries[dataStore.getPreferenceSync(PrefKeys.workingModeRequest)]
         set(value) {
             dataStore.editPreferenceSync(PrefKeys.workingModeKey, value.ordinal)
+        }
+
+    var smartDisplayEnabled: Boolean
+        get() = dataStore.getPreferenceSync(PrefKeys.smartDisplayEnabledRequest)
+        set(value) {
+            dataStore.editPreferenceSync(PrefKeys.smartDisplayEnabledKey, value)
         }
 
     var circles: List<Pair<Int, Int>>
