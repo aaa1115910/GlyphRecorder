@@ -59,6 +59,7 @@ import com.github.only52607.compose.window.LocalFloatingWindow
 import dev.aaa1115910.glyphrecorder.BuildConfig
 import dev.aaa1115910.glyphrecorder.R
 import dev.aaa1115910.glyphrecorder.ui.components.GlyphImage
+import dev.aaa1115910.glyphrecorder.util.ShizukuConfig
 import dev.aaa1115910.glyphrecorder.util.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -132,6 +133,8 @@ private fun FloatingToolbox(
             state.onClearGlyphs()
         },
         onClose = {
+            state.stopAutoCapture()
+            ShizukuConfig.stopShizuku()
             floatingWindow.hide()
             resetPosition()
             Prefs.working = false

@@ -186,6 +186,7 @@ fun HomeScreen(
                             onShowFloatingToolbox()
                         } else {
                             showSnackbarMessage(context.getString(R.string.start_service_failed_shizuku))
+                            ShizukuConfig.stopShizuku()
                             logger.error { "Failed to start Shizuku ScreenCaptureService" }
                         }
                     }
@@ -212,6 +213,7 @@ fun HomeScreen(
             }
 
             WorkingMode.Shizuku -> {
+                ShizukuConfig.stopShizuku()
                 updateWorking(false)
                 onCloseFloatingToolbox()
             }
